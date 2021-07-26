@@ -2,7 +2,6 @@
   "name": "crush",
   "version": "0.1.0",
   "description": "Crushes internal stylesheets.",
-  "main": "index.js",
   "scripts": {
     "test": "mocha"
   },
@@ -16,5 +15,8 @@
   },
   "dependencies": {
     "cssnano": "^5.0.7"
+  },
+  "bin": {
+    "crush": "bin/crush.js"
   }
 }
