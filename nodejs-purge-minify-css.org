@@ -1,0 +1,156 @@
+#+title: Purge and minify internal CSS stylesheets with Node.js
+#+html_path: /nodejs-purge-minify-css/
+#+date: 2021-07-26
+#+description: Use PurgeCSS and cssnano to purge and minify an internal CSS stylesheet
+#+setupfile: ../setup.org
+
+For an HTML file with an internal CSS stylesheet, I'd like to remove all unused selectors and minify the result.
+
+#+CAPTION: The input file
+#+begin_src html :tangle input.html
+  <html>
+    <head>
+      <style>
+	body{
+	  font: 22px/1.6 system-ui, sans-serif;
+	  margin: auto;
+	  max-width: 35em;
+	  padding: 0 1em;
+	}
+
+	img, video{
+	  max-width: 100%;
+	  height: auto;
+	}
+      </style>
+    </head>
+    <body>
+      <h1>Hello world!</h1>
+    </body>
+  </html>
+#+end_src
+
+This output example purges the =img= and =video= selectors and minifies the stylesheet by removing newlines:
+
+#+RESULTS: results
+: <html>
+:   <head>
+:     <style>body{font:22px/1.6 system-ui,sans-serif;margin:auto;max-width:35em;padding:0 1em}</style>
+:   </head>
+:   <body>
+:     <h1>Hello world!</h1>
+:   </body>
+: </html>
+:
+
+The most popular tools to do this seem to be [[https://purgecss.com][PurgeCSS]] for purging and [[https://cssnano.co][cssnano]] for minifying, which are both [[https://postcss.org][PostCSS]] plugins.
+
+We can't use their command-line interfaces, as neither of these has a command-line option to take the internal stylesheet out of a page to purge and minify, as both expect the CSS and HTML to be in separate files.
+Instead, we'll write a Node.js program that takes HTML files as input and prints them back out after minifying the internal stylesheets.
+
+The program takes an HTML page through /standard input/ with =fs.readFileSync("/dev/stdin")=, which it then passes to a function named =crush=:
+
+#+CAPTION: =bin/crush.js=
+#+begin_src js :tangle bin/crush.js
+  #! /usr/bin/env node
+  const fs = require("fs");
+  const crush = require("..");
+  let input = fs.readFileSync("/dev/stdin").toString();
+
+  crush.crush(input).then(console.log);
+#+end_src
+
+The =crush= function takes the input HTML string and finds the stylesheet through a regular expression that captures anything within =<style>= tags.
+For each stylesheet, it passes the match from the regular expression along with the whole input file to a function called =process=.
+The promises it returns are collected and placed back into the =<style>= tags in the HTML file:
+
+#+CAPTION: The =crush= function in =index.js=
+#+NAME: crush
+#+begin_src js
+  const regex = /<style>(.*?)<\/style>/gs;
+
+  exports.crush = async function (input) {
+    let promises = [...input.matchAll(regex)].map((match) => {
+      return process(match, input);
+    });
+    let replacements = await Promise.all(promises);
+
+    return input.replace(regex, () => replacements.shift());
+  };
+#+end_src
+
+The =process= function handles processing the extracted stylesheet through PostCSS, initialized with the PurgeCSS[fn:purgecss] and cssnano plugins.
+When the promise is fulfilled, the result---which is the purged and minified style sheet---is placed back into the =<style>= tag:
+
+#+CAPTION: The =process= function in =index.js=
+#+NAME: process
+#+begin_src js
+  function process(match, html) {
+    return postcss([
+      purgecss({ content: [{ raw: html.replace(match[1], "") }] }),
+      cssnano(),
+    ])
+      .process(match[1])
+      .then((result) => {
+	return match[0].replace(match[1], result.css);
+      });
+  }
+#+end_src
+
+In the end, the =index.js= file looks like this:
+
+#+CAPTION: =index.js=
+#+begin_src js :tangle index.js :noweb yes
+  const postcss = require("postcss");
+  const cssnano = require("cssnano");
+  const purgecss = require("@fullhuman/postcss-purgecss");
+  <<crush>>
+
+  <<process>>
+#+end_src
+
+The program now takes an HTML document as a string through standard input and minifies the internal stylesheet[fn:crush]:
+
+#+name: results
+#+begin_src shell :results output :exports both
+cat input.html | ./bin/crush.js
+#+end_src
+
+#+RESULTS: results
+: <html>
+:   <head>
+:     <style>body{font:22px/1.6 system-ui,sans-serif;margin:auto;max-width:35em;padding:0 1em}</style>
+:   </head>
+:   <body>
+:     <h1>Hello world!</h1>
+:   </body>
+: </html>
+
+[fn:purgecss] When passing the stylesheet through PurgeCSS, the HTML page to check against is passed via the =content= option:
+
+#+begin_src js
+  purgecss({content: [{raw: html.replace(match[1], "")}]})
+#+end_src
+
+We need to make sure the stylesheet itself isn't included in =content=, as that would prevent PurgeCSS from removing the tags.
+
+As an example, consider this input HTML file, which has styling for a =<div>= which isn't there:
+
+#+begin_src html
+<style>div { color: red }</style>
+#+end_src
+
+PurgeCSS should purge that CSS selector, because there are no =<div>= tags on the page.
+However, if we pass the input file as a =content= as-is, PurgeCSS will see "div" in the stylesheet and assume there's a =<div>= tag on the page.[fn:false-positives]
+
+[fn:false-positives] Upon closer inspection; PurgeCSS will also recognise the following document as having a =<div>= tag for mentioning the word "div" in another tag:
+
+#+begin_src html
+  <h1>An article about the div tag</h1>
+#+end_src
+
+[fn:crush] [[https://github.com/jeffkreeftmeijer/crush][Crush]]'s source code and tests are on GitHub, and is installed via Git:
+
+#+begin_src shell
+  npm install jeffkreeftmeijer/crush
+#+end_src
