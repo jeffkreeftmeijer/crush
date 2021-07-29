@@ -8,13 +8,13 @@
   "author": "Jeff Kreeftmeijer",
   "license": "MIT",
   "devDependencies": {
-    "prettier": "^2.3.2",
-    "@fullhuman/postcss-purgecss": "^4.0.3",
     "mocha": "^9.0.2",
-    "postcss": "^8.3.6"
+    "prettier": "^2.3.2"
   },
   "dependencies": {
-    "cssnano": "^5.0.7"
+    "@fullhuman/postcss-purgecss": "^4.0.3",
+    "cssnano": "^5.0.7",
+    "postcss": "^8.3.6"
   },
   "bin": {
     "crush": "bin/crush.js"
