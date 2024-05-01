@@ -1,3 +1,6 @@
+:PROPERTIES:
+:ID:       F6A43450-1B0D-410E-B968-7F39C21AE373
+:END:
 #+title: Purge and minify internal CSS stylesheets with Node.js
 #+html_path: /nodejs-purge-minify-css/
 #+date: 2021-07-26
